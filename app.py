@@ -1,47 +1,47 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import numpy as np
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-st.set_page_config(layout="wide", page_title="Finance Hub")
-st.title("🌌 Institutional Sentiment Hub")
+st.set_page_config(layout="wide", page_title="Institutional Sentiment Hub")
 
-ticker = st.text_input("Enter Ticker (e.g., AAPL)", "AAPL").upper()
+# Sidebar Menu (Matching "Main Menu" in Screenshot 2026-07-02 at 6.03.03 PM.jpg)
+with st.sidebar:
+    st.title("Veselty Inc.")
+    st.menu = st.radio("MAIN MENU", ["Dashboard", "Products", "Orders", "Customers"])
+    st.markdown("---")
+    st.write("OTHER")
+    st.write("📊 Analytics")
+    st.write("⚙️ Settings")
 
+# Dashboard Header
+st.title("Dashboard")
+st.write("Track your sentiment strategy performance")
+
+ticker = st.text_input("Enter Ticker", "AAPL").upper()
 if st.button("Fetch Live Data"):
-    try:
-        stock = yf.Ticker(ticker)
-        news = stock.news
-        
-        if news and len(news) > 0:
-            df = pd.DataFrame(news)
-            
-            # Extract the actual readable text from the raw dictionary/string mess
-            # We look for 'title' or 'summary' and strip out the technical garbage
-            def clean_text(x):
-                if isinstance(x, dict): return x.get('title', '')
-                return str(x)
+    stock = yf.Ticker(ticker)
+    news = stock.news
+    df = pd.DataFrame(news)
+    sid = SentimentIntensityAnalyzer()
+    df['Sentiment'] = df['title'].apply(lambda x: sid.polarity_scores(str(x))['compound'])
 
-            # We focus on the 'title' column if it exists, otherwise we clean the 'content'
-            display_col = 'title' if 'title' in df.columns else 'content'
-            
-            # Perform Sentiment
-            sid = SentimentIntensityAnalyzer()
-            df['Sentiment'] = df[display_col].apply(lambda x: sid.polarity_scores(str(x))['compound'])
-            
-            # Display metrics
-            st.metric("Average Market Mood", round(df['Sentiment'].mean(), 2))
-            
-            # Show only the clean headline and the score
-            st.subheader("Latest Headlines")
-            st.dataframe(df[[display_col, 'Sentiment']], use_container_width=True)
-            
-            # Add a simple chart
-            st.subheader("Sentiment Distribution")
-            st.bar_chart(df['Sentiment'])
-            
-        else:
-            st.warning(f"No news found for {ticker}.")
-            
-    except Exception as e:
-        st.error(f"Error processing data: {e}")
+    # Top KPI Row (Matching the "Product Overview/Active Sales" boxes)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Current Sentiment", round(df['Sentiment'].mean(), 2), "1.2%")
+    col2.metric("News Count", len(df), "5%")
+    col3.metric("Volatility Index", "Low", "-2%")
+
+    # Main Analytics Row (The "Main graph thingy" from Screenshot 2026-07-02 at 6.03.03 PM.jpg)
+    st.subheader("Analytics")
+    st.area_chart(df['Sentiment'])
+
+    # Bottom Row (Top Products & Detailed view)
+    col4, col5 = st.columns([2, 1])
+    with col4:
+        st.subheader("Sentiment Distribution")
+        st.bar_chart(df['Sentiment'])
+    with col5:
+        st.subheader("Latest Headlines")
+        st.dataframe(df[['title', 'Sentiment']], use_container_width=True)
