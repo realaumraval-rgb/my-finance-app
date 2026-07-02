@@ -13,17 +13,20 @@ if st.button("Fetch Live Data"):
         stock = yf.Ticker(ticker)
         news = stock.news
         
+        # Check if we actually got data back
         if news and len(news) > 0:
             df = pd.DataFrame(news)
             
+            # Show the columns we found so we can see what's wrong if it fails
             if 'title' in df.columns:
                 sid = SentimentIntensityAnalyzer()
                 df['Sentiment'] = df['title'].apply(lambda x: sid.polarity_scores(x)['compound'])
                 st.metric("Average Sentiment", round(df['Sentiment'].mean(), 2))
                 st.table(df[['title', 'Sentiment']])
             else:
-                st.error("Data structure error: 'title' column not found.")
+                st.error(f"Found news, but expected a 'title' column. Columns found: {df.columns.tolist()}")
         else:
-            st.error("No news found for this ticker.")
+            st.warning(f"No news found for {ticker}. Try a different ticker like 'AAPL', 'TSLA', or 'NVDA'.")
+            
     except Exception as e:
         st.error(f"An error occurred: {e}")
