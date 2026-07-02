@@ -16,23 +16,32 @@ if st.button("Fetch Live Data"):
         if news and len(news) > 0:
             df = pd.DataFrame(news)
             
-            # The "AI-Proof" fix: Check for 'title', then 'content', then 'summary'
-            text_column = None
-            for col in ['title', 'content', 'summary']:
-                if col in df.columns:
-                    text_column = col
-                    break
+            # Extract the actual readable text from the raw dictionary/string mess
+            # We look for 'title' or 'summary' and strip out the technical garbage
+            def clean_text(x):
+                if isinstance(x, dict): return x.get('title', '')
+                return str(x)
+
+            # We focus on the 'title' column if it exists, otherwise we clean the 'content'
+            display_col = 'title' if 'title' in df.columns else 'content'
             
-            if text_column:
-                sid = SentimentIntensityAnalyzer()
-                # Apply sentiment to whichever column we found
-                df['Sentiment'] = df[text_column].apply(lambda x: sid.polarity_scores(x)['compound'])
-                st.metric("Average Sentiment", round(df['Sentiment'].mean(), 2))
-                st.table(df[[text_column, 'Sentiment']])
-            else:
-                st.error(f"Could not find a text column to analyze. Columns found: {df.columns.tolist()}")
+            # Perform Sentiment
+            sid = SentimentIntensityAnalyzer()
+            df['Sentiment'] = df[display_col].apply(lambda x: sid.polarity_scores(str(x))['compound'])
+            
+            # Display metrics
+            st.metric("Average Market Mood", round(df['Sentiment'].mean(), 2))
+            
+            # Show only the clean headline and the score
+            st.subheader("Latest Headlines")
+            st.dataframe(df[[display_col, 'Sentiment']], use_container_width=True)
+            
+            # Add a simple chart
+            st.subheader("Sentiment Distribution")
+            st.bar_chart(df['Sentiment'])
+            
         else:
             st.warning(f"No news found for {ticker}.")
             
     except Exception as e:
-        st.error(f"An unexpected error occurred: {e}")
+        st.error(f"Error processing data: {e}")
