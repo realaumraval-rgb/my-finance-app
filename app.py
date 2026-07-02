@@ -13,20 +13,26 @@ if st.button("Fetch Live Data"):
         stock = yf.Ticker(ticker)
         news = stock.news
         
-        # Check if we actually got data back
         if news and len(news) > 0:
             df = pd.DataFrame(news)
             
-            # Show the columns we found so we can see what's wrong if it fails
-            if 'title' in df.columns:
+            # The "AI-Proof" fix: Check for 'title', then 'content', then 'summary'
+            text_column = None
+            for col in ['title', 'content', 'summary']:
+                if col in df.columns:
+                    text_column = col
+                    break
+            
+            if text_column:
                 sid = SentimentIntensityAnalyzer()
-                df['Sentiment'] = df['title'].apply(lambda x: sid.polarity_scores(x)['compound'])
+                # Apply sentiment to whichever column we found
+                df['Sentiment'] = df[text_column].apply(lambda x: sid.polarity_scores(x)['compound'])
                 st.metric("Average Sentiment", round(df['Sentiment'].mean(), 2))
-                st.table(df[['title', 'Sentiment']])
+                st.table(df[[text_column, 'Sentiment']])
             else:
-                st.error(f"Found news, but expected a 'title' column. Columns found: {df.columns.tolist()}")
+                st.error(f"Could not find a text column to analyze. Columns found: {df.columns.tolist()}")
         else:
-            st.warning(f"No news found for {ticker}. Try a different ticker like 'AAPL', 'TSLA', or 'NVDA'.")
+            st.warning(f"No news found for {ticker}.")
             
     except Exception as e:
-        st.error(f"An error occurred: {e}")
+        st.error(f"An unexpected error occurred: {e}")
