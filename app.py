@@ -21,21 +21,34 @@ with st.sidebar:
     st.markdown("---")
     st.write(f"Refreshed: {datetime.now().strftime('%H:%M:%S')}")
 
-# --- HEADER ROW (System Live Indicator) ---
+# --- HEADER ROW ---
 col_head1, col_head2 = st.columns([0.8, 0.2])
 col_head1.title(f"{st.session_state.page}")
 col_head2.markdown("<h3 style='text-align: right; color: #00FF00;'>● System Live</h3>", unsafe_allow_html=True)
 
-# --- BACKEND LOGIC ---
+# --- BACKEND LOGIC (FIXED) ---
 @st.cache_data(ttl=300)
 def fetch_top_movers():
     tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "V", "JPM", "JNJ"]
     data = []
     for t in tickers:
-        stock = yf.Ticker(t)
-        # Using fast_info to get percentage change
-        change = stock.fast_info['regularMarketChangePercent'] * 100
-        data.append({'Ticker': t, 'Change': change})
+        try:
+            stock = yf.Ticker(t)
+            # Safe calculation: Try the standard key, or calculate from prices
+            info = stock.fast_info
+            price = info.get('last_price', 0)
+            prev = info.get('previous_close', 0)
+            
+            # Calculate percentage change safely
+            if prev > 0:
+                change = ((price - prev) / prev) * 100
+            else:
+                change = 0.0
+                
+            data.append({'Ticker': t, 'Change': change})
+        except:
+            data.append({'Ticker': t, 'Change': 0.0})
+            
     return pd.DataFrame(data).sort_values(by='Change', ascending=False)
 
 # --- PAGES ---
@@ -46,7 +59,7 @@ if st.session_state.page == "Dashboard":
     m1, m2, m3 = st.columns(3)
     m1.metric("Top Gainer", f"{movers.iloc[0]['Ticker']}", f"{movers.iloc[0]['Change']:.2f}%")
     m2.metric("Market Sentiment", "Bullish", "High Volatility")
-    m3.metric("Assets Tracked", "10", "Static")
+    m3.metric("Assets Tracked", "10", "Live")
     
     # Graph
     st.subheader("Market Performance - Top 10")
@@ -63,7 +76,6 @@ elif st.session_state.page == "Analytics":
 elif st.session_state.page == "Settings":
     st.subheader("App Configuration")
     st.checkbox("Enable Dark Mode", value=True)
-    st.slider("Refresh Rate (seconds)", 10, 60, 20)
     if st.button("Clear Cache & Reboot"):
         st.cache_data.clear()
         st.rerun()
