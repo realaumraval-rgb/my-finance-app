@@ -5,64 +5,77 @@ import plotly.express as px
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from datetime import datetime
 
-# Page Configuration
+# --- CONFIG ---
 st.set_page_config(layout="wide", page_title="Institutional Sentiment Hub")
 
-# --- CUSTOM CSS FOR "VESELTY" LOOK ---
-st.markdown("""
-    <style>
-    div[data-testid="stMetric"] {background-color: #1c2029; padding: 15px; border-radius: 10px; border: 1px solid #333;}
-    .css-1r6slp0 {background-color: #0e1117;}
-    .stApp {background-color: #0e1117;}
-    </style>
-    """, unsafe_allow_html=True)
+# Initialize Session State
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = datetime.now()
+if 'page' not in st.session_state:
+    st.session_state.page = "Dashboard"
 
-# --- BACKEND LOGIC ---
-@st.cache_data(ttl=300)
+# --- BACKEND: REAL-TIME FETCHING ---
+@st.cache_data(ttl=60)
 def get_dashboard_data():
-    tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"] # Limited to 5 for speed/relevance
+    tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
     data = []
     sid = SentimentIntensityAnalyzer()
     
     for t in tickers:
         stock = yf.Ticker(t)
-        # Get News Sentiment
+        # Price Change
+        hist = stock.history(period="1d")
+        change = ((hist['Close'].iloc[-1] - hist['Open'].iloc[0]) / hist['Open'].iloc[0]) * 100 if not hist.empty else 0
+        
+        # Sentiment
         news = stock.news
         sentiment = 0
         if news:
-            # Average the sentiment of the first 5 headlines
             sentiments = [sid.polarity_scores(n.get('title', ''))['compound'] for n in news[:5]]
             sentiment = sum(sentiments) / len(sentiments)
             
-        data.append({'Ticker': t, 'Sentiment': sentiment})
-        
+        data.append({'Ticker': t, 'Change': change, 'Sentiment': sentiment})
     return pd.DataFrame(data)
 
-# --- NAVIGATION ---
-if 'page' not in st.session_state: st.session_state.page = "Dashboard"
+# --- REFRESH LOGIC ---
+df = get_dashboard_data()
+seconds_ago = int((datetime.now() - st.session_state.last_refresh).total_seconds())
 
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("🌌 Institutional Hub")
     if st.button("Dashboard"): st.session_state.page = "Dashboard"
     if st.button("Analytics"): st.session_state.page = "Analytics"
     st.markdown("---")
-    st.write(f"Refreshed: {datetime.now().strftime('%H:%M:%S')}")
+    if st.button("Manual Refresh"):
+        st.cache_data.clear()
+        st.session_state.last_refresh = datetime.now()
+        st.rerun()
 
-# --- DASHBOARD UI ---
-st.title("Dashboard")
-df = get_dashboard_data()
+# --- HEADER ROW ---
+col1, col2 = st.columns([0.7, 0.3])
+col1.title(f"{st.session_state.page}")
+col2.markdown(f"**🟢 System Live** | Updated {seconds_ago}s ago")
 
-# KPI Row (The "Card" Style)
-col1, col2, col3 = st.columns(3)
-col1.metric("Market Mood", "Bullish" if df['Sentiment'].mean() > 0 else "Bearish", f"{df['Sentiment'].mean():.2f}")
-col2.metric("Top Sentiment", df.loc[df['Sentiment'].idxmax()]['Ticker'], "High")
-col3.metric("System Status", "Live", "Stable")
+# --- PAGE CONTENT ---
+if st.session_state.page == "Dashboard":
+    # KPIs
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Market Sentiment", "Bullish" if df['Sentiment'].mean() > 0 else "Bearish", f"{df['Sentiment'].mean():.2f}")
+    m2.metric("Assets Analyzed", len(df), "Live")
+    m3.metric("System Status", "Stable", "OK")
 
-# Main Content Grid
-st.subheader("Asset Sentiment Analysis")
-fig = px.bar(df, x='Ticker', y='Sentiment', color='Sentiment', 
-             color_continuous_scale='RdYlGn', template='plotly_dark')
-st.plotly_chart(fig, use_container_width=True)
+    # Visualization
+    st.subheader("Market Sentiment vs. Performance")
+    fig = px.bar(df, x='Ticker', y='Sentiment', color='Sentiment', color_continuous_scale='RdYlGn', template='plotly_dark')
+    st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("Sentiment Breakdown")
-st.table(df.style.background_gradient(cmap='RdYlGn'))
+    # Data Grid
+    st.subheader("Asset Breakdown")
+    # Using dataframe instead of table to avoid styling dependency errors if preferred, 
+    # but with matplotlib added, this background_gradient will now work:
+    st.table(df.style.background_gradient(cmap='RdYlGn'))
+
+elif st.session_state.page == "Analytics":
+    st.subheader("Deep Dive Analysis")
+    st.write("Historical sentiment trends are loading...")
